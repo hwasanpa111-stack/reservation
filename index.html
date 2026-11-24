@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>축제 부스 예약 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            user-select: none; /* 드래그 방지 */
+            -webkit-user-select: none;
+            overflow: hidden; /* 스크롤 방지 */
+            background-color: #f3f4f6;
+        }
+        /* 터치 시 하이라이트 제거 */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 숫자 키패드 버튼 스타일 */
+        .numpad-btn {
+            transition: all 0.1s;
+        }
+        .numpad-btn:active {
+            transform: scale(0.95);
+            background-color: #e5e7eb;
+        }
+        .numpad-btn.primary-btn:active {
+            background-color: #1d4ed8;
+        }
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row">
+
+    <!-- 상단 시계 영역 (3번 연속 클릭 시 관리자 모드 진입) -->
+    <div id="dateTimeDisplay" class="absolute top-4 right-6 text-gray-500 font-medium text-lg cursor-pointer z-10 px-4 py-2 bg-white/80 rounded-full shadow-sm backdrop-blur-sm select-none">
+        00월 00일 00:00
+    </div>
+
+    <!-- 왼쪽 영역: 현재 상태 안내 -->
+    <div class="w-full md:w-1/2 h-2/5 md:h-full bg-blue-600 text-white flex flex-col justify-center items-center p-8 shadow-xl z-0 relative">
+        <div id="boothTitleDisplay" class="absolute top-8 left-8 text-2xl font-bold opacity-80">
+            🎉 우리반 축제 부스
+        </div>
+        
+        <div class="text-center w-full mt-10">
+            <h2 class="text-3xl md:text-4xl font-medium mb-4 text-blue-200">현재 입장 학번</h2>
+            <div id="currentEnteringDisplay" class="text-7xl md:text-9xl font-black tracking-wider mb-8 drop-shadow-lg h-32 flex items-center justify-center">
+                대기중
+            </div>
+            
+            <div class="mt-8 p-6 bg-white/10 rounded-2xl backdrop-blur-md inline-block w-full max-w-xl">
+                <h3 class="text-xl text-blue-200 mb-4">다음 대기자</h3>
+                <div id="nextWaitingDisplay" class="text-lg md:text-xl font-bold grid grid-cols-3 gap-x-4 gap-y-3 text-left w-full">
+                    없음
+                </div>
+            </div>
+            <div class="mt-4 text-blue-200 text-lg">
+                총 대기: <span id="totalWaitCount" class="font-bold text-white text-2xl">0</span>팀 
+                <span class="text-sm">(총 <span id="totalWaitPeople" class="font-bold text-white">0</span>명)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 오른쪽 영역: 등록 및 번호표 입력 -->
+    <div class="w-full md:w-1/2 h-3/5 md:h-full bg-gray-50 flex flex-col items-center justify-center p-4 md:p-8">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-lg p-6 md:p-8">
+            <h2 class="text-2xl font-bold text-gray-800 text-center mb-6">부스 예약하기</h2>
+            
+            <!-- 입력창 -->
+            <div class="mb-6 relative">
+                <div id="studentIdInput" class="w-full h-16 bg-gray-100 rounded-xl flex items-center justify-center text-4xl font-bold text-gray-700 tracking-[0.2em] border-2 border-transparent transition-colors">
+                </div>
+                <div class="text-center text-gray-400 text-sm mt-2">학번 4자리를 입력하세요 (예: 1315)</div>
+            </div>
+
+            <!-- 예약 인원 선택기 -->
+            <div class="mb-6 bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
+                <span class="text-gray-600 font-bold">예약 인원 (본인 포함)</span>
+                <div class="flex items-center gap-4">
+                    <button class="w-10 h-10 rounded-full bg-white border border-gray-300 text-gray-600 font-bold text-xl flex items-center justify-center active:bg-gray-100 shadow-sm" onclick="changePartySize(-1)">-</button>
+                    <span id="partySizeDisplay" class="text-xl font-bold w-12 text-center text-gray-800">1명</span>
+                    <button class="w-10 h-10 rounded-full bg-white border border-gray-300 text-gray-600 font-bold text-xl flex items-center justify-center active:bg-gray-100 shadow-sm" onclick="changePartySize(1)">+</button>
+                </div>
+            </div>
+
+            <!-- 숫자 키패드 -->
+            <div class="grid grid-cols-3 gap-3 md:gap-4 mb-6">
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('1')">1</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('2')">2</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('3')">3</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('4')">4</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('5')">5</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('6')">6</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('7')">7</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('8')">8</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('9')">9</button>
+                <button class="numpad-btn h-14 md:h-16 bg-red-50 text-red-500 border border-red-100 rounded-xl text-xl font-bold shadow-sm" onclick="clearInput()">초기화</button>
+                <button class="numpad-btn h-14 md:h-16 bg-white border border-gray-200 rounded-xl text-2xl font-semibold text-gray-700 shadow-sm" onclick="inputNumber('0')">0</button>
+                <button class="numpad-btn h-14 md:h-16 bg-gray-100 border border-gray-200 rounded-xl text-xl font-bold text-gray-600 shadow-sm" onclick="deleteNumber()">지우기</button>
+            </div>
+
+            <!-- 등록 버튼 -->
+            <button onclick="registerStudent()" class="numpad-btn primary-btn w-full h-16 bg-blue-600 text-white rounded-xl text-xl font-bold shadow-lg shadow-blue-200">
+                예약 등록하기
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ================= 모달 영역 (알림창, 관리자 등) ================= -->
+
+    <!-- 1. 공통 알림 모달 -->
+    <div id="messageModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-95 opacity-0" id="messageModalContent">
+            <div id="messageIcon" class="text-5xl mb-4">🔔</div>
+            <h3 id="messageTitle" class="text-2xl font-bold text-gray-800 mb-2">알림</h3>
+            <p id="messageText" class="text-gray-600 mb-8 text-lg whitespace-pre-line">메시지 내용</p>
+            <button onclick="closeMessage()" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors">확인</button>
+        </div>
+    </div>
+
+    <!-- 2. 관리자 비밀번호 입력 모달 -->
+    <div id="adminAuthModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm text-center">
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">관리자 모드</h3>
+            <p class="text-gray-500 mb-6 text-sm">비밀번호를 입력하세요 (기본: 0000)</p>
+            
+            <div id="adminPasswordDisplay" class="h-16 bg-gray-100 rounded-xl mb-6 flex items-center justify-center text-3xl tracking-[1em] text-gray-800 font-bold overflow-hidden">
+                <!-- 별표 표시 영역 -->
+            </div>
+
+            <!-- 관리자용 미니 키패드 -->
+            <div class="grid grid-cols-3 gap-2 mb-6">
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('1')">1</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('2')">2</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('3')">3</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('4')">4</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('5')">5</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('6')">6</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('7')">7</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('8')">8</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('9')">9</button>
+                <button class="numpad-btn py-3 bg-gray-200 rounded-lg text-sm font-bold text-gray-600" onclick="closeAdminAuth()">취소</button>
+                <button class="numpad-btn py-3 bg-gray-50 rounded-lg text-xl font-medium" onclick="inputAdminPw('0')">0</button>
+                <button class="numpad-btn py-3 bg-gray-200 rounded-lg text-sm font-bold text-gray-600" onclick="deleteAdminPw()">지우기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 관리자 대시보드 모달 -->
+    <div id="adminDashboardModal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 md:p-8 backdrop-blur-md">
+        <div class="bg-white rounded-3xl shadow-2xl flex flex-col w-full max-w-5xl h-full max-h-[85vh]">
+            <!-- 헤더 -->
+            <div class="flex justify-between items-center p-6 border-b border-gray-100">
+                <h2 class="text-2xl font-bold text-gray-800">⚙️ 부스 운영 관리</h2>
+                <button onclick="closeAdminDashboard()" class="text-gray-400 hover:text-gray-600 p-1">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- 본문 영역 -->
+            <div class="flex flex-col md:flex-row flex-1 overflow-hidden p-6 gap-6">
+                <!-- 왼쪽 제어 패널 -->
+                <div class="w-full md:w-1/3 flex flex-col gap-4">
+                    <div class="bg-blue-50 rounded-2xl p-6 border border-blue-100 flex-1 flex flex-col justify-center">
+                        <h3 class="text-center text-blue-800 font-bold text-lg mb-2">현재 입장</h3>
+                        <div id="adminCurrentDisplay" class="text-center text-4xl font-black text-blue-600 mb-6">-</div>
+                        
+                        <button onclick="callNextStudent()" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold text-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 mb-3">
+                            ▶ 다음 사람 호출
+                        </button>
+                        <button onclick="clearCurrentStudent()" class="w-full py-3 bg-white text-gray-600 border border-gray-300 rounded-xl font-bold hover:bg-gray-50 transition-colors">
+                            입장 완료 (비우기)
+                        </button>
+                    </div>
+                    
+                    <button onclick="clearEntireQueue()" class="w-full py-4 bg-red-50 text-red-600 border border-red-200 rounded-xl font-bold hover:bg-red-100 transition-colors">
+                        🗑️ 전체 데이터 초기화
+                    </button>
+
+                    <div class="mt-2 bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+                        <h4 class="text-sm font-bold text-gray-700 mb-2">부스 이름 변경</h4>
+                        <div class="flex gap-2 w-full">
+                            <input type="text" id="adminBoothTitleInput" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="예: 🎉 2학년 3반 귀신의집">
+                            <button onclick="changeBoothTitle()" class="shrink-0 whitespace-nowrap px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-bold hover:bg-gray-700">적용</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 오른쪽 리스트 패널 (탭: 대기자 명단 / 입장 완료 목록) -->
+                <div class="w-full md:w-2/3 bg-gray-50 rounded-2xl p-6 border border-gray-200 flex flex-col h-full overflow-hidden">
+                    <!-- 탭 버튼 영역 -->
+                    <div class="flex bg-gray-200/80 p-1 rounded-xl mb-4 shrink-0">
+                        <button id="tabBtnWaiting" onclick="switchAdminTab('waiting')" class="flex-1 py-2.5 rounded-lg font-bold text-sm transition-all bg-white text-blue-600 shadow-sm">
+                            대기자 명단 (<span id="tabWaitingCount">0</span>)
+                        </button>
+                        <button id="tabBtnCompleted" onclick="switchAdminTab('completed')" class="flex-1 py-2.5 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-gray-700">
+                            입장 완료 목록 (<span id="tabCompletedCount">0</span>)
+                        </button>
+                    </div>
+
+                    <!-- 탭 1: 대기자 명단 뷰 -->
+                    <div id="waitingTabView" class="flex flex-col flex-1 overflow-hidden">
+                        <div class="flex justify-between items-end mb-3 shrink-0">
+                            <h3 class="font-bold text-gray-700 text-base">현재 대기 중</h3>
+                            <span class="text-sm text-gray-500">총 <span id="adminTotalCount" class="font-bold text-blue-600">0</span>팀 (<span id="adminTotalPeople" class="font-bold text-blue-600">0</span>명)</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto pr-2" id="adminQueueList">
+                            <!-- JS로 대기자 리스트 삽입 -->
+                        </div>
+                    </div>
+
+                    <!-- 탭 2: 입장 완료 목록 뷰 -->
+                    <div id="completedTabView" class="hidden flex-col flex-1 overflow-hidden">
+                        <div class="flex justify-between items-center mb-3 shrink-0">
+                            <div class="flex items-baseline gap-2">
+                                <h3 class="font-bold text-gray-700 text-base">입장 완료 기록</h3>
+                                <span class="text-sm text-gray-500">누적 <span id="adminCompletedCount" class="font-bold text-emerald-600">0</span>팀 (<span id="adminCompletedPeople" class="font-bold text-emerald-600">0</span>명)</span>
+                            </div>
+                            <button onclick="clearCompletedList()" class="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors">
+                                완료 기록만 비우기
+                            </button>
+                        </div>
+                        <div class="flex-1 overflow-y-auto pr-2" id="adminCompletedList">
+                            <!-- JS로 입장 완료 리스트 삽입 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        /* =========================================================================
+           1. 상태 변수 및 로컬 스토리지 키 설정
+           ========================================================================= */
+        const STORAGE_QUEUE_KEY = 'festival_booth_queue';
+        const STORAGE_CURRENT_KEY = 'festival_booth_current';
+        const STORAGE_COMPLETED_KEY = 'festival_booth_completed'; // 입장 완료 목록 저장 키
+        const STORAGE_TITLE_KEY = 'festival_booth_title';
+        
+        let waitQueue = [];         // 대기자 배열 ({id: 학번, count: 인원수})
+        let currentStudent = null;  // 현재 입장 중인 학생 객체 ({id: 학번, count: 인원수})
+        let completedList = [];     // 입장 완료된 팀 배열 ({id: 학번, count: 인원수, completedAt: 'HH:MM'})
+        let boothTitle = '🎉 우리반 축제 부스'; // 부스 이름 기본값
+        
+        let currentInput = '';      // 학생 예약 입력값
+        let partySize = 1;          // 예약 인원수
+        let adminPwInput = '';      // 관리자 비밀번호 입력값
+        let activeAdminTab = 'waiting'; // 현재 선택된 관리자 탭 ('waiting' | 'completed')
+        const ADMIN_PASSWORD = '0000';  // 관리자 비밀번호 (기본값)
+
+        // 현재 시각 문자열 반환 헬퍼 (예: 14:35)
+        function getCurrentTimeString() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        // 오프라인 저장을 위한 데이터 불러오기
+        function loadData() {
+            try {
+                const savedQueue = localStorage.getItem(STORAGE_QUEUE_KEY);
+                const savedCurrent = localStorage.getItem(STORAGE_CURRENT_KEY);
+                const savedCompleted = localStorage.getItem(STORAGE_COMPLETED_KEY);
+                const savedTitle = localStorage.getItem(STORAGE_TITLE_KEY);
+                
+                if (savedQueue) {
+                    const parsed = JSON.parse(savedQueue);
+                    // 기존 문자열 데이터를 객체(인원 1명)로 마이그레이션
+                    waitQueue = parsed.map(item => typeof item === 'string' ? { id: item, count: 1 } : item);
+                }
+                if (savedCurrent) {
+                    try {
+                        const parsedCurrent = JSON.parse(savedCurrent);
+                        currentStudent = typeof parsedCurrent === 'string' ? { id: parsedCurrent, count: 1 } : parsedCurrent;
+                    } catch(e) {
+                        currentStudent = { id: savedCurrent, count: 1 };
+                    }
+                    if (savedCurrent === '""' || savedCurrent === '' || savedCurrent === 'null') currentStudent = null;
+                }
+                if (savedCompleted) {
+                    const parsedCompleted = JSON.parse(savedCompleted);
+                    if (Array.isArray(parsedCompleted)) {
+                        completedList = parsedCompleted;
+                    }
+                }
+                if (savedTitle) boothTitle = savedTitle;
+            } catch (e) {
+                console.error("데이터 로드 실패:", e);
+                waitQueue = [];
+                currentStudent = null;
+                completedList = [];
+            }
+        }
+
+        // 데이터 저장하기
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_QUEUE_KEY, JSON.stringify(waitQueue));
+                localStorage.setItem(STORAGE_CURRENT_KEY, JSON.stringify(currentStudent));
+                localStorage.setItem(STORAGE_COMPLETED_KEY, JSON.stringify(completedList));
+                localStorage.setItem(STORAGE_TITLE_KEY, boothTitle);
+            } catch (e) {
+                console.error("데이터 저장 실패:", e);
+            }
+        }
+
+        /* =========================================================================
+           2. 화면 업데이트 (렌더링) 함수
+           ========================================================================= */
+        function updateDisplay() {
+            // 상단 부스 이름 업데이트
+            document.getElementById('boothTitleDisplay').innerText = boothTitle;
+
+            // 왼쪽 메인 화면 업데이트
+            const currentDisp = document.getElementById('currentEnteringDisplay');
+            if (currentStudent && currentStudent.id) {
+                currentDisp.innerHTML = `${currentStudent.id} <span class="text-3xl md:text-5xl ml-2 font-medium text-blue-200">(${currentStudent.count}명)</span>`;
+                currentDisp.classList.remove('text-4xl');
+            } else {
+                currentDisp.innerText = '비어있음';
+                currentDisp.classList.add('text-4xl');
+            }
+
+            const nextDisp = document.getElementById('nextWaitingDisplay');
+            if (waitQueue.length > 0) {
+                const nextFifteen = waitQueue.slice(0, 15);
+                nextDisp.innerHTML = nextFifteen.map((student, index) => `<div class="whitespace-nowrap">${index + 1}. <span class="text-white">${student.id}</span> <span class="text-sm text-blue-200">(${student.count}명)</span></div>`).join('');
+            } else {
+                nextDisp.innerHTML = '<div class="col-span-3 text-center text-blue-300 w-full">없음</div>';
+            }
+
+            document.getElementById('totalWaitCount').innerText = waitQueue.length;
+            const totalPeople = waitQueue.reduce((sum, student) => sum + student.count, 0);
+            document.getElementById('totalWaitPeople').innerText = totalPeople;
+
+            // 관리자 화면이 열려있다면 관리자 화면도 업데이트
+            if (!document.getElementById('adminDashboardModal').classList.contains('hidden')) {
+                updateAdminDashboard();
+            }
+        }
+
+        /* =========================================================================
+           3. 예약 입력 (사용자 기능)
+           ========================================================================= */
+        function changePartySize(delta) {
+            partySize += delta;
+            if (partySize < 1) partySize = 1;
+            if (partySize > 20) partySize = 20; // 최대 인원 20명 제한
+            document.getElementById('partySizeDisplay').innerText = partySize + '명';
+        }
+
+        function updateInputDisplay() {
+            const display = document.getElementById('studentIdInput');
+            display.innerText = currentInput;
+            
+            // 입력 시 테두리 하이라이트 효과
+            if(currentInput.length > 0) {
+                display.classList.add('border-blue-500', 'bg-blue-50');
+            } else {
+                display.classList.remove('border-blue-500', 'bg-blue-50');
+            }
+            document.getElementById('partySizeDisplay').innerText = partySize + '명';
+        }
+
+        function inputNumber(num) {
+            if (currentInput.length < 4) { // 학번은 최대 4자리로 제한
+                currentInput += num;
+                updateInputDisplay();
+            }
+        }
+
+        function deleteNumber() {
+            if (currentInput.length > 0) {
+                currentInput = currentInput.slice(0, -1);
+                updateInputDisplay();
+            }
+        }
+
+        function clearInput() {
+            currentInput = '';
+            partySize = 1;
+            updateInputDisplay();
+        }
+
+        // 등록 로직
+        function registerStudent() {
+            if (currentInput.length !== 4) {
+                showModal('입력 오류', '학번 4자리를 정확하게 입력해주세요.', 'error');
+                return;
+            }
+
+            const isDuplicate = waitQueue.some(s => s.id === currentInput) || (currentStudent && currentStudent.id === currentInput);
+            if (isDuplicate) {
+                showModal('중복 등록', '이미 입장 중이거나 대기열에 등록된 학번입니다.', 'error');
+                clearInput();
+                return;
+            }
+
+            // 배열에 추가 후 저장
+            waitQueue.push({ id: currentInput, count: partySize });
+            saveData();
+            
+            const myTurn = waitQueue.length; // 내 대기 순서
+            
+            showModal('예약 완료!', `[${currentInput}] 등록되었습니다.\n내 앞에 ${myTurn - 1}팀이 대기중입니다.`, 'success');
+            clearInput();
+            updateDisplay();
+        }
+
+        /* =========================================================================
+           4. 시계 및 숨겨진 관리자 트리거
+           ========================================================================= */
+        function updateClock() {
+            const now = new Date();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const date = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            document.getElementById('dateTimeDisplay').innerText = `${month}월 ${date}일 ${hours}:${minutes}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 3번 클릭 트리거 로직
+        let clickCount = 0;
+        let clickTimer = null;
+
+        document.getElementById('dateTimeDisplay').addEventListener('click', () => {
+            clickCount++;
+            
+            if (clickCount === 1) {
+                // 첫 클릭 시 1.5초 내에 3번 못 채우면 리셋
+                clickTimer = setTimeout(() => {
+                    clickCount = 0;
+                }, 1500);
+            }
+            
+            if (clickCount === 3) {
+                clearTimeout(clickTimer);
+                clickCount = 0;
+                openAdminDashboard(); // 비밀번호 확인 없이 바로 대시보드 오픈
+            }
+        });
+
+        /* =========================================================================
+           5. 관리자 로그인 (비밀번호 모달)
+           ========================================================================= */
+        function openAdminAuth() {
+            adminPwInput = '';
+            updateAdminPwDisplay();
+            document.getElementById('adminAuthModal').classList.remove('hidden');
+        }
+
+        function closeAdminAuth() {
+            document.getElementById('adminAuthModal').classList.add('hidden');
+        }
+
+        function updateAdminPwDisplay() {
+            const display = document.getElementById('adminPasswordDisplay');
+            display.innerText = '*'.repeat(adminPwInput.length);
+        }
+
+        function inputAdminPw(num) {
+            if (adminPwInput.length < 4) {
+                adminPwInput += num;
+                updateAdminPwDisplay();
+                
+                if (adminPwInput.length === 4) {
+                    setTimeout(checkAdminPassword, 100);
+                }
+            }
+        }
+
+        function deleteAdminPw() {
+            if (adminPwInput.length > 0) {
+                adminPwInput = adminPwInput.slice(0, -1);
+                updateAdminPwDisplay();
+            }
+        }
+
+        function checkAdminPassword() {
+            if (adminPwInput === ADMIN_PASSWORD) {
+                closeAdminAuth();
+                openAdminDashboard();
+            } else {
+                showModal('권한 없음', '비밀번호가 틀렸습니다.', 'error');
+                closeAdminAuth();
+            }
+        }
+
+        /* =========================================================================
+           6. 관리자 대시보드 컨트롤 및 탭 전환
+           ========================================================================= */
+        function openAdminDashboard() {
+            document.getElementById('adminDashboardModal').classList.remove('hidden');
+            updateAdminDashboard();
+        }
+
+        function closeAdminDashboard() {
+            document.getElementById('adminDashboardModal').classList.add('hidden');
+        }
+
+        // 관리자 탭 전환 ('waiting' 또는 'completed')
+        function switchAdminTab(tabName) {
+            activeAdminTab = tabName;
+            const waitingBtn = document.getElementById('tabBtnWaiting');
+            const completedBtn = document.getElementById('tabBtnCompleted');
+            const waitingView = document.getElementById('waitingTabView');
+            const completedView = document.getElementById('completedTabView');
+
+            if (tabName === 'waiting') {
+                waitingBtn.className = 'flex-1 py-2.5 rounded-lg font-bold text-sm transition-all bg-white text-blue-600 shadow-sm';
+                completedBtn.className = 'flex-1 py-2.5 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-gray-700';
+                waitingView.classList.remove('hidden');
+                waitingView.classList.add('flex');
+                completedView.classList.add('hidden');
+                completedView.classList.remove('flex');
+            } else {
+                completedBtn.className = 'flex-1 py-2.5 rounded-lg font-bold text-sm transition-all bg-white text-emerald-600 shadow-sm';
+                waitingBtn.className = 'flex-1 py-2.5 rounded-lg font-bold text-sm transition-all text-gray-500 hover:text-gray-700';
+                completedView.classList.remove('hidden');
+                completedView.classList.add('flex');
+                waitingView.classList.add('hidden');
+                waitingView.classList.remove('flex');
+            }
+        }
+
+        function updateAdminDashboard() {
+            // 현재 부스 이름 입력창 업데이트
+            document.getElementById('adminBoothTitleInput').value = boothTitle;
+
+            // 현재 입장자 표시
+            document.getElementById('adminCurrentDisplay').innerText = currentStudent ? `${currentStudent.id} (${currentStudent.count}명)` : '비어있음';
+            
+            // 탭 배지 카운트 업데이트
+            document.getElementById('tabWaitingCount').innerText = waitQueue.length;
+            document.getElementById('tabCompletedCount').innerText = completedList.length;
+
+            // 1) 대기자 통계 및 리스트 렌더링
+            document.getElementById('adminTotalCount').innerText = waitQueue.length;
+            const totalPeople = waitQueue.reduce((sum, student) => sum + student.count, 0);
+            document.getElementById('adminTotalPeople').innerText = totalPeople;
+
+            const listContainer = document.getElementById('adminQueueList');
+            listContainer.innerHTML = '';
+
+            if (waitQueue.length === 0) {
+                listContainer.innerHTML = `<div class="h-full flex items-center justify-center text-gray-400">대기 인원이 없습니다.</div>`;
+            } else {
+                waitQueue.forEach((student, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm mb-3';
+                    
+                    item.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">${index + 1}</div>
+                            <span class="text-xl font-bold text-gray-800">${student.id} <span class="text-base font-normal text-gray-500">(${student.count}명)</span></span>
+                        </div>
+                        <button onclick="removeSpecificStudent(${index})" class="px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-500 rounded-lg text-sm font-bold transition-colors">
+                            취소
+                        </button>
+                    `;
+                    listContainer.appendChild(item);
+                });
+            }
+
+            // 2) 입장 완료 통계 및 리스트 렌더링
+            document.getElementById('adminCompletedCount').innerText = completedList.length;
+            const completedPeople = completedList.reduce((sum, student) => sum + student.count, 0);
+            document.getElementById('adminCompletedPeople').innerText = completedPeople;
+
+            const completedContainer = document.getElementById('adminCompletedList');
+            completedContainer.innerHTML = '';
+
+            if (completedList.length === 0) {
+                completedContainer.innerHTML = `<div class="h-full flex items-center justify-center text-gray-400">아직 입장 완료된 팀이 없습니다.</div>`;
+            } else {
+                completedList.forEach((student, index) => {
+                    // 최신 항목이 위에 오므로, 실제 입장 순서 번호는 역순으로 계산
+                    const orderNumber = completedList.length - index;
+                    const item = document.createElement('div');
+                    item.className = 'flex justify-between items-center bg-white p-4 rounded-xl border border-emerald-100 shadow-sm mb-3';
+                    
+                    item.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">${orderNumber}</div>
+                            <div>
+                                <div class="text-xl font-bold text-gray-800">
+                                    ${student.id} <span class="text-base font-normal text-gray-500">(${student.count}명)</span>
+                                </div>
+                                <div class="text-xs text-gray-400 mt-0.5">입장 완료 시각: ${student.completedAt || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="restoreToQueue(${index})" class="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors" title="다시 대기열 맨 앞으로 복구">
+                                대기 복구
+                            </button>
+                            <button onclick="removeCompletedRecord(${index})" class="px-3 py-2 bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-500 rounded-lg text-xs font-bold transition-colors">
+                                삭제
+                            </button>
+                        </div>
+                    `;
+                    completedContainer.appendChild(item);
+                });
+            }
+        }
+
+        // 현재 입장 팀을 완료 목록에 기록하는 헬퍼 함수
+        function recordCurrentAsCompleted() {
+            if (currentStudent && currentStudent.id) {
+                completedList.unshift({
+                    id: currentStudent.id,
+                    count: currentStudent.count,
+                    completedAt: getCurrentTimeString()
+                });
+            }
+        }
+
+        // 호출 로직: 기존 입장 팀은 완료 목록으로 이동시키고, 큐에서 첫번째 사람 빼서 현재 입장으로 변경
+        function callNextStudent() {
+            if (waitQueue.length === 0) {
+                showModal('알림', '다음 대기자가 없습니다.', 'info');
+                return;
+            }
+            
+            // 현재 입장 중인 팀이 있었다면 입장 완료 목록에 자동 기록
+            recordCurrentAsCompleted();
+
+            currentStudent = waitQueue.shift(); // 첫 번째 원소 제거 후 반환
+            saveData();
+            updateDisplay();
+        }
+
+        // 현재 입장 비우기 (입장 완료 처리)
+        function clearCurrentStudent() {
+            if (!currentStudent) {
+                showModal('알림', '현재 입장 중인 팀이 없습니다.', 'info');
+                return;
+            }
+
+            // 입장 완료 목록에 기록 후 비우기
+            recordCurrentAsCompleted();
+            currentStudent = null;
+            saveData();
+            updateDisplay();
+        }
+
+        // 특정 학생 대기열에서 제거 (노쇼 등)
+        function removeSpecificStudent(index) {
+            waitQueue.splice(index, 1);
+            saveData();
+            updateDisplay();
+        }
+
+        // 실수로 완료 처리한 팀을 다시 대기열 맨 앞으로 복구
+        function restoreToQueue(index) {
+            const target = completedList[index];
+            if (!target) return;
+
+            // 이미 대기열이나 현재 입장에 같은 학번이 있는지 확인
+            const isDuplicate = waitQueue.some(s => s.id === target.id) || (currentStudent && currentStudent.id === target.id);
+            if (isDuplicate) {
+                showModal('복구 불가', '이미 대기열이나 현재 입장에 등록된 학번입니다.', 'error');
+                return;
+            }
+
+            completedList.splice(index, 1);
+            waitQueue.unshift({ id: target.id, count: target.count });
+            saveData();
+            updateDisplay();
+            showModal('복구 완료', `[${target.id}] 팀을 대기열 1순위로 복구했습니다.`, 'success');
+        }
+
+        // 입장 완료 목록에서 개별 기록 삭제
+        function removeCompletedRecord(index) {
+            completedList.splice(index, 1);
+            saveData();
+            updateDisplay();
+        }
+
+        // 입장 완료 목록만 전체 비우기
+        function clearCompletedList() {
+            if (completedList.length === 0) {
+                showModal('알림', '삭제할 완료 기록이 없습니다.', 'info');
+                return;
+            }
+            completedList = [];
+            saveData();
+            updateDisplay();
+            showModal('기록 삭제', '입장 완료 목록이 모두 비워졌습니다.', 'info');
+        }
+
+        // 전체 데이터 초기화 (대기열 + 현재 입장 + 완료 기록)
+        function clearEntireQueue() {
+            waitQueue = [];
+            currentStudent = null;
+            completedList = [];
+            saveData();
+            updateDisplay();
+            showModal('초기화 완료', '모든 대기열, 현재 입장 정보 및 완료 기록이 초기화되었습니다.', 'info');
+        }
+
+        // 부스 이름 변경 로직
+        function changeBoothTitle() {
+            const inputVal = document.getElementById('adminBoothTitleInput').value.trim();
+            if (inputVal === '') {
+                showModal('입력 오류', '부스 이름을 입력해주세요.', 'error');
+                return;
+            }
+            boothTitle = inputVal;
+            saveData();
+            updateDisplay();
+            showModal('변경 완료', '부스 이름이 성공적으로 변경되었습니다.', 'success');
+        }
+
+        /* =========================================================================
+           7. 커스텀 모달 알림창 (alert 대체)
+           ========================================================================= */
+        function showModal(title, text, type) {
+            document.getElementById('messageTitle').innerText = title;
+            document.getElementById('messageText').innerText = text;
+            
+            const icon = document.getElementById('messageIcon');
+            if(type === 'error') {
+                icon.innerText = '❌';
+            } else if (type === 'success') {
+                icon.innerText = '✅';
+            } else {
+                icon.innerText = '🔔';
+            }
+
+            const modal = document.getElementById('messageModal');
+            const content = document.getElementById('messageModalContent');
+            
+            modal.classList.remove('hidden');
+            
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeMessage() {
+            const modal = document.getElementById('messageModal');
+            const content = document.getElementById('messageModalContent');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        /* =========================================================================
+           8. 초기 실행 (Initialization)
+           ========================================================================= */
+        window.onload = function() {
+            loadData();
+            updateDisplay();
+        }
+    </script>
+</body>
+</html>
